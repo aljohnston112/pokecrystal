@@ -82,22 +82,24 @@ MusicOff:
 
 _UpdateSound::
 ; called once per frame
-	; no use updating audio if it's not playing
+	; return if not playing
 	ld a, [wMusicPlaying]
 	and a
 	ret z
+
 	; start at ch1
 	xor a
-	ld [wCurChannel], a ; just
-	ld [wSoundOutput], a ; off
+	ld [wCurChannel], a 
+	ld [wSoundOutput], a 
 	ld bc, wChannel1
 .loop
-	; is the channel active?
+	; next channel if not active
 	ld hl, CHANNEL_FLAGS1
 	add hl, bc
 	bit SOUND_CHANNEL_ON, [hl]
 	jp z, .nextchannel
-	; check time left in the current note
+
+	; check current note duration
 	ld hl, CHANNEL_NOTE_DURATION
 	add hl, bc
 	ld a, [hl]
@@ -105,7 +107,6 @@ _UpdateSound::
 	jr c, .noteover
 	dec [hl]
 	jr .continue_sound_update
-
 .noteover
 	; reset vibrato delay
 	ld hl, CHANNEL_VIBRATO_DELAY
@@ -114,40 +115,39 @@ _UpdateSound::
 	ld hl, CHANNEL_VIBRATO_DELAY_COUNT
 	add hl, bc
 	ld [hl], a
+
 	; turn vibrato off for now
 	ld hl, CHANNEL_FLAGS2
 	add hl, bc
 	res SOUND_PITCH_SLIDE, [hl]
-	; get next note
-	call ParseMusic
+
+	call ParseMusic ; next note
 .continue_sound_update
 	call ApplyPitchSlide
-	; duty cycle
 	ld hl, CHANNEL_DUTY_CYCLE
 	add hl, bc
 	ld a, [hli]
 	ld [wCurTrackDuty], a
-	; volume envelope
 	ld a, [hli]
 	ld [wCurTrackVolumeEnvelope], a
-	; frequency
 	ld a, [hli]
 	ld [wCurTrackFrequency], a
 	ld a, [hl]
 	ld [wCurTrackFrequency + 1], a
-	; vibrato, noise
-	call HandleTrackVibrato ; handle vibrato and other things
+	call HandleTrackVibrato 
 	call HandleNoise
-	; turn off music when playing sfx?
+
+	; turn off music when playing sfx
 	ld a, [wSFXPriority]
 	and a
 	jr z, .next
-	; are we in a sfx channel right now?
+
+	; sfx channel?
 	ld a, [wCurChannel]
 	cp NUM_MUSIC_CHANS
 	jr nc, .next
-	; are any sfx channels active?
-	; if so, mute
+
+	; mute current channel if an sfx channel is on
 	ld hl, wChannel5Flags1
 	bit SOUND_CHANNEL_ON, [hl]
 	jr nz, .restnote
@@ -163,7 +163,7 @@ _UpdateSound::
 .restnote
 	ld hl, CHANNEL_NOTE_FLAGS
 	add hl, bc
-	set NOTE_REST, [hl] ; Rest
+	set NOTE_REST, [hl] 
 .next
 	; are we in a sfx channel right now?
 	ld a, [wCurChannel]
@@ -187,7 +187,6 @@ _UpdateSound::
 	xor a
 	ld [hl], a
 .nextchannel
-	; next channel
 	ld hl, CHANNEL_STRUCT_LENGTH
 	add hl, bc
 	ld c, l
@@ -195,16 +194,13 @@ _UpdateSound::
 	ld a, [wCurChannel]
 	inc a
 	ld [wCurChannel], a
-	cp NUM_CHANNELS ; are we done?
-	jp nz, .loop ; do it all again
+	cp NUM_CHANNELS ; last channel?
+	jp nz, .loop 
 
 	call PlayDanger
-	; fade music in/out
 	call FadeMusic
-	; write volume to hardware register
 	ld a, [wVolume]
 	ldh [rNR50], a
-	; write SO on/off to hardware register
 	ld a, [wSoundOutput]
 	ldh [rNR51], a
 	ret
@@ -212,7 +208,7 @@ _UpdateSound::
 UpdateChannels:
 	ld hl, .ChannelFnPtrs
 	ld a, [wCurChannel]
-	maskbits NUM_MUSIC_CHANS ; bit 0-2 (current channel)
+	maskbits NUM_MUSIC_CHANS
 	add a
 	ld e, a
 	ld d, 0
@@ -233,7 +229,6 @@ UpdateChannels:
 	dw .Channel6
 	dw .Channel7
 	dw .Channel8
-
 .Channel1:
 	ld a, [wLowHealthAlarm]
 	bit DANGER_ON_F, a
@@ -243,18 +238,22 @@ UpdateChannels:
 	add hl, bc
 	bit NOTE_PITCH_SWEEP, [hl]
 	jr z, .noPitchSweep
-	;
+
 	ld a, [wPitchSweep]
 	ldh [rNR10], a
 .noPitchSweep
-	bit NOTE_REST, [hl] ; rest
+	bit NOTE_REST, [hl]
 	jr nz, .ch1_rest
+
 	bit NOTE_NOISE_SAMPLING, [hl]
 	jr nz, .ch1_noise_sampling
+
 	bit NOTE_FREQ_OVERRIDE, [hl]
 	jr nz, .ch1_frequency_override
+
 	bit NOTE_VIBRATO_OVERRIDE, [hl]
 	jr nz, .ch1_vibrato_override
+
 	jr .ch1_check_duty_override
 
 .ch1_frequency_override
@@ -310,7 +309,7 @@ UpdateChannels:
 .Channel6:
 	ld hl, CHANNEL_NOTE_FLAGS
 	add hl, bc
-	bit NOTE_REST, [hl] ; rest
+	bit NOTE_REST, [hl]
 	jr nz, .ch2_rest
 	bit NOTE_NOISE_SAMPLING, [hl]
 	jr nz, .ch2_noise_sampling
@@ -401,10 +400,10 @@ UpdateChannels:
 .ch3_noise_sampling
 	ld a, $3f ; sound length
 	ldh [rNR31], a
-	xor a
+	xor a ; ch3 sound off
 	ldh [rNR30], a
 	call .load_wave_pattern
-	ld a, $80
+	ld a, $80 ; ch3 sound on
 	ldh [rNR30], a
 	ld a, [wCurTrackFrequency]
 	ldh [rNR33], a
@@ -828,10 +827,12 @@ LoadNote:
 
 HandleTrackVibrato:
 ; handle duty, cry pitch, and vibrato
+; duty
 	ld hl, CHANNEL_FLAGS2
 	add hl, bc
-	bit SOUND_DUTY_LOOP, [hl] ; duty cycle looping
+	bit SOUND_DUTY_LOOP, [hl]
 	jr z, .next
+
 	ld hl, CHANNEL_DUTY_CYCLE_PATTERN
 	add hl, bc
 	ld a, [hl]
@@ -840,19 +841,23 @@ HandleTrackVibrato:
 	ld [hl], a
 	and $c0
 	ld [wCurTrackDuty], a
+
 	ld hl, CHANNEL_NOTE_FLAGS
 	add hl, bc
 	set NOTE_DUTY_OVERRIDE, [hl]
 .next
+; pitch
 	ld hl, CHANNEL_FLAGS2
 	add hl, bc
 	bit SOUND_PITCH_OFFSET, [hl]
 	jr z, .vibrato
+
 	ld hl, CHANNEL_PITCH_OFFSET
 	add hl, bc
 	ld e, [hl]
 	inc hl
 	ld d, [hl]
+
 	ld hl, wCurTrackFrequency
 	ld a, [hli]
 	ld h, [hl]
@@ -868,15 +873,16 @@ HandleTrackVibrato:
 	; is vibrato on?
 	ld hl, CHANNEL_FLAGS2
 	add hl, bc
-	bit SOUND_VIBRATO, [hl] ; vibrato
+	bit SOUND_VIBRATO, [hl]
 	jr z, .quit
-	; is vibrato active for this note yet?
+
 	; is the delay over?
 	ld hl, CHANNEL_VIBRATO_DELAY_COUNT
 	add hl, bc
 	ld a, [hl]
 	and a
 	jr nz, .subexit
+
 	; is the extent nonzero?
 	ld hl, CHANNEL_VIBRATO_EXTENT
 	add hl, bc
@@ -885,6 +891,7 @@ HandleTrackVibrato:
 	jr z, .quit
 	; save it for later
 	ld d, a
+
 	; is it time to toggle vibrato up/down?
 	ld hl, CHANNEL_VIBRATO_RATE
 	add hl, bc
@@ -894,49 +901,41 @@ HandleTrackVibrato:
 .subexit
 	dec [hl]
 	jr .quit
-
 .toggle
 	; refresh count
 	ld a, [hl]
 	swap [hl]
 	or [hl]
 	ld [hl], a
-	; ????
+	; save for determining new frequency
 	ld a, [wCurTrackFrequency]
 	ld e, a
-	; toggle vibrato up/down
+
 	ld hl, CHANNEL_FLAGS3
 	add hl, bc
-	bit SOUND_VIBRATO_DIR, [hl] ; vibrato up/down
+	bit SOUND_VIBRATO_DIR, [hl]
 	jr z, .down
+; update [wCurTrackFrequency]
 ; up
-	; vibrato down
-	res SOUND_VIBRATO_DIR, [hl]
-	; get the delay
+	res SOUND_VIBRATO_DIR, [hl] ; down
 	ld a, d
-	and $f ; lo
-	;
+	and $f
 	ld d, a
 	ld a, e
 	sub d
 	jr nc, .no_carry
 	ld a, 0
 	jr .no_carry
-
 .down
-	; vibrato up
-	set SOUND_VIBRATO_DIR, [hl]
-	; get the delay
+	set SOUND_VIBRATO_DIR, [hl] ; up
 	ld a, d
-	and $f0 ; hi
-	swap a ; move it to lo
-	;
+	and $f0 
+	swap a
 	add e
 	jr nc, .no_carry
 	ld a, $ff
 .no_carry
 	ld [wCurTrackFrequency], a
-	;
 	ld hl, CHANNEL_NOTE_FLAGS
 	add hl, bc
 	set NOTE_VIBRATO_OVERRIDE, [hl]
@@ -949,18 +948,16 @@ ApplyPitchSlide:
 	add hl, bc
 	bit SOUND_PITCH_SLIDE, [hl]
 	ret z
-	; de = Frequency
 	ld hl, CHANNEL_FREQUENCY
 	add hl, bc
 	ld e, [hl]
 	inc hl
 	ld d, [hl]
-	; check whether pitch slide is going up or down
 	ld hl, CHANNEL_FLAGS3
 	add hl, bc
 	bit SOUND_PITCH_SLIDE_DIR, [hl]
 	jr z, .decreasing
-	; frequency += [Channel*PitchSlideAmount]
+	; de = [CHANNEL_PITCH_SLIDE_AMOUNT + bc] + dw [CHANNEL_FREQUENCY + bc]
 	ld hl, CHANNEL_PITCH_SLIDE_AMOUNT
 	add hl, bc
 	ld l, [hl]
@@ -968,7 +965,7 @@ ApplyPitchSlide:
 	add hl, de
 	ld d, h
 	ld e, l
-	; [Channel*Field25] += [Channel*PitchSlideAmountFraction]
+	; [CHANNEL_FIELD25 + bc] += [CHANNEL_PITCH_SLIDE_AMOUNT_FRACTION + bc]
 	; if rollover: Frequency += 1
 	ld hl, CHANNEL_PITCH_SLIDE_AMOUNT_FRACTION
 	add hl, bc
@@ -983,7 +980,7 @@ ApplyPitchSlide:
 	ld a, 0
 	adc d
 	ld d, a
-	; Compare the dw at [Channel*PitchSlideTarget] to de.
+	; Compare the dw at [CHANNEL_PITCH_SLIDE_TARGET] to ([CHANNEL_PITCH_SLIDE_AMOUNT + bc] + [CHANNEL_FREQUENCY + bc]).
 	; If frequency is greater, we're finished.
 	; Otherwise, load the frequency and set two flags.
 	ld hl, CHANNEL_PITCH_SLIDE_TARGET + 1
@@ -1000,7 +997,7 @@ ApplyPitchSlide:
 	jr .continue_pitch_slide
 
 .decreasing
-	; frequency -= [Channel*PitchSlideAmount]
+	;  de = [CHANNEL_FREQUENCY + bc] - [CHANNEL_PITCH_SLIDE_AMOUNT + bc]
 	ld a, e
 	ld hl, CHANNEL_PITCH_SLIDE_AMOUNT
 	add hl, bc
@@ -1010,7 +1007,7 @@ ApplyPitchSlide:
 	ld a, d
 	sbc 0
 	ld d, a
-	; [Channel*Field25] *= 2
+	; [CHANNEL_PITCH_SLIDE_AMOUNT_FRACTION + bc] *= 2
 	; if rollover: Frequency -= 1
 	ld hl, CHANNEL_PITCH_SLIDE_AMOUNT_FRACTION
 	add hl, bc
@@ -1023,7 +1020,7 @@ ApplyPitchSlide:
 	ld a, d
 	sbc 0
 	ld d, a
-	; Compare the dw at [Channel*PitchSlideTarget] to de.
+	; Compare the dw at [CHANNEL_PITCH_SLIDE_TARGET + bc] to de.
 	; If frequency is lower, we're finished.
 	; Otherwise, load the frequency and set two flags.
 	ld hl, CHANNEL_PITCH_SLIDE_TARGET + 1
@@ -1059,23 +1056,25 @@ ApplyPitchSlide:
 	ret
 
 HandleNoise:
-	; is noise sampling on?
+	; return if noise sampling is off
 	ld hl, CHANNEL_FLAGS1
 	add hl, bc
-	bit SOUND_NOISE, [hl] ; noise sampling
+	bit SOUND_NOISE, [hl] 
 	ret z
-	; are we in a sfx channel?
+
+	; are we in a noise channel?
 	ld a, [wCurChannel]
 	bit NOISE_CHAN_F, a
 	jr nz, .next
+
 	; is ch8 on? (noise)
 	ld hl, wChannel8Flags1
-	bit SOUND_CHANNEL_ON, [hl] ; on?
+	bit SOUND_CHANNEL_ON, [hl]
 	jr z, .next
+
 	; is ch8 playing noise?
 	bit SOUND_NOISE, [hl]
-	ret nz ; quit if so
-	;
+	ret nz
 .next
 	ld a, [wNoiseSampleDelay]
 	and a
@@ -1089,23 +1088,20 @@ ReadNoiseSample:
 ;	[wx] [yy] [zz]
 ;	w: ? either 2 or 3
 ;	x: duration
-;	zz: volume envelope
-;       yy: frequency
+;	yy: volume envelope
+;   zz: frequency
 
-	; de = [wNoiseSampleAddress]
 	ld hl, wNoiseSampleAddress
 	ld e, [hl]
 	inc hl
 	ld d, [hl]
 
-	; is it empty?
+	; quit if empty or sound_ret_cmd was reached
 	ld a, e
 	or d
 	jr z, .quit
-
 	ld a, [de]
 	inc de
-
 	cp sound_ret_cmd
 	jr z, .quit
 
@@ -1803,7 +1799,7 @@ Music_DutyCyclePattern:
 ; params: 1 (4 2-bit duty cycle arguments)
 	ld hl, CHANNEL_FLAGS2
 	add hl, bc
-	set SOUND_DUTY_LOOP, [hl] ; duty cycle looping
+	set SOUND_DUTY_LOOP, [hl]
 	; sound duty sequence
 	call GetMusicByte
 	rrca
@@ -2180,37 +2176,37 @@ GetFrequency:
 
 SetNoteDuration:
 ; input: a = note duration in 16ths
-	; store delay units in de
+	; de = delay units (a+1)
 	inc a
 	ld e, a
 	ld d, 0
 	ld hl, CHANNEL_NOTE_LENGTH
 	add hl, bc
 	ld a, [hl]
-	; multiply NoteLength by delay units
-	ld l, 0 ; just multiply
+
+	;  a = $00FF & ([CHANNEL_NOTE_LENGTH + bc] * delay units)
+	ld l, 0 
 	call .Multiply
-	ld a, l ; low
-	; store Tempo in de
+	ld a, l
+
+	; dw [CHANNEL_NOTE_DURATION + bc][CHANNEL_FIELD16 + bc] 
+	;		= [CHANNEL_FIELD16 + bc]
+	;		+ (($00FF & ([CHANNEL_NOTE_LENGTH + bc] * delay units))
+	;			*[CHANNEL_TEMPO + bc])
 	ld hl, CHANNEL_TEMPO
 	add hl, bc
 	ld e, [hl]
 	inc hl
 	ld d, [hl]
-	; add ???? to the next result
 	ld hl, CHANNEL_FIELD16
 	add hl, bc
 	ld l, [hl]
-	; multiply Tempo by last result (NoteLength * LOW(delay))
 	call .Multiply
-	; copy result to de
 	ld e, l
 	ld d, h
-	; store result in ????
 	ld hl, CHANNEL_FIELD16
 	add hl, bc
 	ld [hl], e
-	; store result in NoteDuration
 	ld hl, CHANNEL_NOTE_DURATION
 	add hl, bc
 	ld [hl], d
@@ -2218,15 +2214,13 @@ SetNoteDuration:
 
 .Multiply:
 ; multiplies a and de
-; adds the result to l
+; adds input l to the result
 ; stores the result in hl
 	ld h, 0
 .loop
 	; halve a
 	srl a
-	; is there a remainder?
 	jr nc, .skip
-	; add it to the result
 	add hl, de
 .skip
 	; add de, de
@@ -2666,7 +2660,7 @@ LoadChannel:
 ; sets bc to current channel pointer
 	call LoadMusicByte
 	inc de
-	maskbits NUM_MUSIC_CHANS ; bit 0-2 (current channel)
+	maskbits NUM_MUSIC_CHANS
 	ld [wCurChannel], a
 	ld c, a
 	ld b, 0
@@ -2805,7 +2799,7 @@ ClearChannels::
 
 ClearChannel:
 ; input: hl = beginning hw sound register (rNR10, rNR20, rNR30, rNR40)
-; output: 00 00 80 00 80
+; output: 00 00 08 00 80
 
 ;   sound channel   1      2      3      4
 	xor a

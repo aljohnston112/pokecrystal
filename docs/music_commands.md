@@ -41,7 +41,8 @@ Basic rest. Used by channels 1-4.
 ## <code>square_note <i>length</i>, <i>volume</i>, <i>fade</i>, <i>frequency</i></code>
 
 Sound effect square note. Used by channels 5-7.  
-`length`: Length of note [`0`, `255`]  
+`length`: Length of note [`0`, `255`] (Limited to under FIRST_MUSIC_CMD (aka $D0)
+									   or (255/[CHANNEL_NOTE_LENGTH]), whichever is less.
 `volume`: Initial volume [`0`, `15`]  
 `fade`: Volume fade [`-7`, `7`]  
 `frequency`: Note frequency [`0`, `65535`]

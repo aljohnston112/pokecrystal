@@ -32,9 +32,9 @@ RTC_M  EQU $09 ; Minutes   0-59 (0-3Bh)
 RTC_H  EQU $0a ; Hours     0-23 (0-17h)
 RTC_DL EQU $0b ; Lower 8 bits of Day Counter (0-FFh)
 RTC_DH EQU $0c ; Upper 1 bit of Day Counter, Carry Bit, Halt Flag
-               ; Bit 0  Most significant bit of Day Counter (Bit 8)
-               ; Bit 6  Halt (0=Active, 1=Stop Timer)
-               ; Bit 7  Day Counter Carry Bit (1=Counter Overflow)
+			   ;   bit 0: Most significant bit of Day Counter (Bit 8)
+			   ;   bit 6: Halt (0=Active, 1=Stop Timer)
+			   ;   bit 7: Day Counter Carry Bit (1=Counter Overflow)
 
 ; interrupt flags
 VBLANK   EQU 0
@@ -77,28 +77,102 @@ rTAC_65536_HZ  EQU %10
 rTAC_16384_HZ  EQU %11
 rIF         EQU $ff0f ; Interrupt Flag (R/W)
 rNR10       EQU $ff10 ; Channel 1 Sweep register (R/W)
+					  ;   bit 7:   unused
+					  ;   bit 6-4: sweep time (R/W)
+					  ;   bit 3:   sweep direction (R/W)
+					  ;   but 2-0: sweep shift (R/W)
 rNR11       EQU $ff11 ; Channel 1 Sound length/Wave pattern duty (R/W)
+					  ;   bit 7-6: Wave Pattern Duty (R/W)
+					  ;   bit 5-0: Sound length data (Write Only) (t1: 0-63)
+					  ;     Wave Duty:
+					  ;       00: 12.5% ( _-------_-------_------- )
+					  ;       01: 25%   ( __------__------__------ )
+					  ;       10: 50%   ( ____----____----____---- )
+					  ;       11: 75%   ( ______--______--______-- )
+					  ;     Sound Length = (64-t1)*(1/256) seconds
+					  ;     The Length value is used only if Bit 6 in NR14 is set.
 rNR12       EQU $ff12 ; Channel 1 Volume Envelope (R/W)
+					  ;	  bit 7-4: Initial Volume of envelope (0-0Fh) (0=No Sound)
+					  ;	  bit 3:   Envelope Direction (0=Decrease, 1=Increase)
+					  ;	  bit 2-0: Number of envelope sweep (n: 0-7)
+					  ;			  (If zero, stop envelope operation.)
+					  ;	Length of 1 step = n*(1/64) seconds
 rNR13       EQU $ff13 ; Channel 1 Frequency lo (Write Only)
+					  ; Lower 8 bits of 11 bit frequency (x).
+					  ; Next 3 bit are in NR14 ($FF14)
 rNR14       EQU $ff14 ; Channel 1 Frequency hi (R/W)
+					  ;   bit 7:   Initial (1=Restart Sound) (Write Only)
+					  ;   bit 6:   Counter/consecutive selection (R/W)
+					  ;			   (1=Stop output when length in NR11 expires)
+					  ;   bit 2-0: Frequency's higher 3 bits (x) (Write Only)
+					  ; Frequency = 131072/(2048-x) Hz
 rNR20       EQU $ff15 ; Channel 2 Sweep register (R/W)
+					  ; unused by system
 rNR21       EQU $ff16 ; Channel 2 Sound Length/Wave Pattern Duty (R/W)
+					  ; Same as rNR11
 rNR22       EQU $ff17 ; Channel 2 Volume Envelope (R/W)
+					  ; Same as rNR12
 rNR23       EQU $ff18 ; Channel 2 Frequency lo data (W)
+					  ; Same as rNR13
 rNR24       EQU $ff19 ; Channel 2 Frequency hi data (R/W)
+					  ; Same as rNR14
 rNR30       EQU $ff1a ; Channel 3 Sound on/off (R/W)
+					  ;   bit 7:   Sound Channel 3 Off  (0=Stop, 1=Playback)
+					  ;   bit 6-0: unused
 rNR31       EQU $ff1b ; Channel 3 Sound Length
+					  ;   bit 7-0: Sound length (t1: 0 - 255)
+					  ; Sound Length = (256-t1)*(1/256) seconds
+					  ; The Length value is used only if Bit 6 in NR34 is set.
 rNR32       EQU $ff1c ; Channel 3 Select output level (R/W)
+					  ;   bit 7:   unused
+					  ;   bit 6-5: Select output level
+					  ;   bit 4-0: unused
+					  ; Possible Output levels are:
+					  ;   0: Mute (No sound)
+					  ;   1: 100% Volume (Produce Wave Pattern RAM Data as it is)
+					  ;   2:  50% Volume (Produce Wave Pattern RAM data shifted once to the right)
+					  ;   3:  25% Volume (Produce Wave Pattern RAM data shifted twice to the right)
 rNR33       EQU $ff1d ; Channel 3 Frequency's lower data (W)
+					  ; Lower 8 bits of an 11 bit frequency (x).
 rNR34       EQU $ff1e ; Channel 3 Frequency's higher data (R/W)
+					  ;   bit 7:   Initial (1=Restart Sound)     (Write Only)
+					  ;   bit 6:   Counter/consecutive selection (R/W)
+					  ;			  (1=Stop output when length in NR31 expires)
+					  ;   bit 2-0: Frequency's higher 3 bits (x) (Write Only)
+					  ; Frequency = 65536/(2048-x) Hz
 rNR40       EQU $ff1f ; Channel 4 Sweep register (R/W)
+					  ; unused by system
 rNR41       EQU $ff20 ; Channel 4 Sound Length (R/W)
+					  ;   bit 7-6: unused
+					  ;   bit 5-0: Sound length data (Write Only) (t1: 0-63)
+					  ; Sound Length = (64-t1)*(1/256) seconds
+					  ; The Length value is used only if Bit 6 in NR44 is set.
 rNR42       EQU $ff21 ; Channel 4 Volume Envelope (R/W)
+					  ; Same as rNR12
 rNR43       EQU $ff22 ; Channel 4 Polynomial Counter (R/W)
-rNR44       EQU $ff23 ; Channel 4 Counter/consecutive; Inital (R/W)
+					  ;   bit 7-4: Shift Clock Frequency (s)
+					  ;   bit 3:   Counter Step/Width (0=15 bits, 1=7 bits)
+					  ;   bit 2-0: Dividing Ratio of Frequencies (r)
+					  ; Frequency = 524288 Hz / r / 2^(s+1) 
+					  ; For r=0 assume r=0.5 instead
+rNR44       EQU $ff23 ; Channel 4 Counter/consecutive; Inital    (R/W)
+					  ;   bit 7:   Initial (1=Restart Sound)     (Write Only)
+					  ;   bit 6:   Counter/consecutive selection (R/W)
 rNR50       EQU $ff24 ; Channel control / ON-OFF / Volume (R/W)
+					  ;   bit 7:   Vin->SO2 ON/OFF
+					  ;   bit 6-4: SO2 output level (volume) (# 0-7)
+					  ;   bit 3:   Vin->SO1 ON/OFF
+					  ;   bit 2-0: SO1 output level (volume) (# 0-7)
 rNR51       EQU $ff25 ; Selection of Sound output terminal (R/W)
+					  ;   bit 7-4: ch1-4 so2 on/off
+					  ;   bit 3-0: ch1-4 so1 on/off
 rNR52       EQU $ff26 ; Sound on/off
+					  ;   bit 7:   All sound on/off (0: stop all sound circuits) (R/W)
+					  ;   bit 6-4: unused    
+					  ;   bit 3:   Sound 4 ON flag (Read Only)
+					  ;   bit 2:   Sound 3 ON flag (Read Only)
+					  ;   bit 1:   Sound 2 ON flag (Read Only)
+					  ;   bit 0:   Sound 1 ON flag (Read Only)
 rWave_0     EQU $ff30
 rWave_1     EQU $ff31
 rWave_2     EQU $ff32
@@ -156,12 +230,12 @@ rBGPD       EQU $ff69 ; CGB Mode Only - Background Palette Data
 rOBPI       EQU $ff6a ; CGB Mode Only - Sprite Palette Index
 rOBPI_AUTO_INCREMENT EQU 7 ; increment rOBPI after write to rOBPD
 rOBPD       EQU $ff6b ; CGB Mode Only - Sprite Palette Data
-rUNKNOWN1   EQU $ff6c ; (FEh) Bit 0 (Read/Write) - CGB Mode Only
+rUNKNOWN1   EQU $ff6c ; (FEh) Bit 0 (R/W) - CGB Mode Only
 rSVBK       EQU $ff70 ; CGB Mode Only - WRAM Bank
-rUNKNOWN2   EQU $ff72 ; (00h) - Bit 0-7 (Read/Write)
-rUNKNOWN3   EQU $ff73 ; (00h) - Bit 0-7 (Read/Write)
-rUNKNOWN4   EQU $ff74 ; (00h) - Bit 0-7 (Read/Write) - CGB Mode Only
-rUNKNOWN5   EQU $ff75 ; (8Fh) - Bit 4-6 (Read/Write)
+rUNKNOWN2   EQU $ff72 ; (00h) - Bit 0-7 (R/W)
+rUNKNOWN3   EQU $ff73 ; (00h) - Bit 0-7 (R/W)
+rUNKNOWN4   EQU $ff74 ; (00h) - Bit 0-7 (R/W) - CGB Mode Only
+rUNKNOWN5   EQU $ff75 ; (8Fh) - Bit 4-6 (R/W)
 rUNKNOWN6   EQU $ff76 ; (00h) - Always 00h (Read Only)
 rUNKNOWN7   EQU $ff77 ; (00h) - Always 00h (Read Only)
 rIE         EQU $ffff ; Interrupt Enable (R/W)

@@ -33,34 +33,17 @@ wChannel8:: channel_struct wChannel8
 
 	ds 1
 
-wCurTrackDuty:: db
+wCurTrackDuty:: db ; corresponds to rNR11 in hardware_constants.asm
 wCurTrackVolumeEnvelope:: db
-wCurTrackFrequency:: dw
+wCurTrackFrequency:: dw ; corresponds to rNR13 and rNR14 in hardware_constants.asm
 wUnusedBCDNumber:: db ; BCD value, dummied out
 wCurNoteDuration:: db ; used in MusicE0 and LoadNote
 
 wCurMusicByte:: db
 wCurChannel:: db
-wVolume::
-; corresponds to rNR50
-; Channel control / ON-OFF / Volume (R/W)
-;   bit 7 - Vin->SO2 ON/OFF
-;   bit 6-4 - SO2 output level (volume) (# 0-7)
-;   bit 3 - Vin->SO1 ON/OFF
-;   bit 2-0 - SO1 output level (volume) (# 0-7)
-	db
-wSoundOutput::
-; corresponds to rNR51
-; bit 4-7: ch1-4 so2 on/off
-; bit 0-3: ch1-4 so1 on/off
-	db
-wPitchSweep::
-; corresponds to rNR10
-; bit 7:   unused
-; bit 4-6: sweep time
-; bit 3:   sweep direction
-; but 0-2: sweep shift
-	db
+wVolume:: db ; corresponds to rNR50 in hardware_constants.asm
+wSoundOutput:: db ; corresponds to rNR51 in hardware_constants.asm
+wPitchSweep:: db ; corresponds to rNR10 in hardware_constants.asm
 
 wMusicID:: dw
 wMusicBank:: db
